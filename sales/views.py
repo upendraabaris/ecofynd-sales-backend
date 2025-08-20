@@ -253,146 +253,6 @@ class TopLossProductsAPIView(APIView):
 
         # RTO and Returned orders ko exclude karo
         qs = SalesData.objects.exclude(status__iexact='Rto')
-from django.db.models import Sum, Case, When, F, DecimalField
-from decimal import Decimal
-from datetime import datetime
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
-
-
-class TopLossProductsAPIView(APIView):
-    def get(self, request):
-        start_date = request.query_params.get("start_date")
-        end_date = request.query_params.get("end_date")
-
-        # Base queryset (exclude RTO)
-        qs = SalesData.objects.exclude(status__iexact='Rto')
-
-        if not (start_date and end_date):
-            raise ValidationError("Both start_date and end_date are required")
-
-        try:
-            start = datetime.strptime(start_date, "%Y-%m-%d")
-            end = datetime.strptime(end_date, "%Y-%m-%d")
-        except ValueError:
-            raise ValidationError("Invalid date format. Use YYYY-MM-DD.")
-
-        # Current period queryset
-        current_qs = qs.filter(order_date__date__gte=start, order_date__date__lte=end)
-
-        # Previous period range (same length as current period, just before start_date)
-        period_days = (end - start).days + 1
-        prev_end = start - timedelta(days=1)
-        prev_start = prev_end - timedelta(days=period_days - 1)
-
-        previous_qs = qs.filter(order_date__date__gte=prev_start, order_date__date__lte=prev_end)
-
-        def aggregate_loss(qset):
-            data = (
-                qset.values('skucode')
-                .annotate(
-                    total_vendor_transfer=Sum('vendor_transfer'),
-                    total_selling_price=Sum(
-                        Case(
-                            When(selling_price__lt=0, then=F('selling_price') * -1),
-                            default=F('selling_price'),
-                            output_field=DecimalField(),
-                        )
-                    ),
-                    total_units=Sum('units_sold'),
-                    total_actual_price=Sum('actual_product_price'),
-                    total_collected_amount=Sum(
-                        Case(
-                            When(selling_price__lt=0, then=F('collected_amount') * -1),
-                            default=F('collected_amount'),
-                            output_field=DecimalField(),
-                        )
-                    ),
-                )
-            )
-
-            total_units_sold = 0
-            total_vendor_transfer_all = Decimal('0.00')
-            total_collected_amount_all = Decimal('0.00')
-            loss_products = []
-
-            for item in data:
-                sku = item['skucode']
-                vendor_transfer = item['total_vendor_transfer'] or Decimal('0.00')
-                selling_price = item['total_selling_price'] or Decimal('0.00')
-                overhead = selling_price * Decimal('0.10')
-                units = item['total_units'] or 0
-                collected_amount = item['total_collected_amount'] or Decimal('0.00')
-                actual_price = item['total_actual_price'] or Decimal('0.00')
-
-                total_cost = actual_price
-                profit_amount = vendor_transfer - (total_cost + overhead)
-                profit_percent = (profit_amount / selling_price) * 100 if selling_price > 0 else Decimal('0.00')
-
-                if profit_amount < 0:
-                    total_units_sold += units
-                    total_vendor_transfer_all += vendor_transfer
-                    total_collected_amount_all += collected_amount
-                    loss_products.append({
-                        "sku": sku,
-                        "vendor_transfer": round(vendor_transfer, 2),
-                        "total_selling_price": round(selling_price, 2),
-                        "units": units,
-                        "collected_amount": round(collected_amount, 2),
-                        "overhead": round(overhead, 2),
-                        "total_cost": round(total_cost, 2),
-                        "profit_amount": round(profit_amount, 2),
-                        "profit_percent": round(profit_percent, 2)
-                    })
-
-            return {
-                "products": loss_products,
-                "total_units_sold": total_units_sold,
-                "total_vendor_transfer": round(total_vendor_transfer_all, 2),
-                "total_loss_count": len(loss_products),
-                "total_collected_amount": round(total_collected_amount_all, 2),
-            }
-
-        # Current & Previous aggregation
-        current_data = aggregate_loss(current_qs)
-        previous_data = aggregate_loss(previous_qs)
-
-        # Comparison helper
-        def compare(current, previous):
-            if previous == 0:
-                return {"current": current, "previous": previous, "percent_change": 100.0 if current > 0 else 0.0,
-                        "status": "increase" if current > 0 else "no change"}
-            percent_change = ((current - previous) / previous) * 100
-            if current > previous:
-                status = "increase"
-            elif current < previous:
-                status = "decrease"
-            else:
-                status = "no change"
-            return {
-                "current": float(current),
-                "previous": float(previous),
-                "percent_change": round(percent_change, 2),
-                "status": status
-            }
-
-        comparison = {
-            "total_units_sold": compare(current_data["total_units_sold"], previous_data["total_units_sold"]),
-            "total_vendor_transfer": compare(current_data["total_vendor_transfer"], previous_data["total_vendor_transfer"]),
-            "total_loss_count": compare(current_data["total_loss_count"], previous_data["total_loss_count"]),
-            "total_collected_amount": compare(current_data["total_collected_amount"], previous_data["total_collected_amount"]),
-        }
-
-        return Response({
-            "top_loss_making_products": current_data["products"],
-            "total_units_sold": current_data["total_units_sold"],
-            "total_vendor_transfer": current_data["total_vendor_transfer"],
-            "total_loss_count": current_data["total_loss_count"],
-            "total_collected_amount": current_data["total_collected_amount"],
-            "previous_period": previous_data,
-            "comparison": comparison
-        })
 
         if start_date and end_date:
             try:
@@ -770,4 +630,64 @@ class SalesSummaryAPIView(APIView):
             },
             "comparison_percent": comparison_detail,
             "daily": list(daily_data)
+        })
+
+
+class VendorTransferProfitAPIView(APIView):
+    def get(self, request):
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+
+        if not (start_date and end_date):
+            raise ValidationError("Both start_date and end_date are required")
+
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+        except ValueError:
+            raise ValidationError("Invalid date format. Use YYYY-MM-DD.")
+
+        # Current period queryset
+        current_qs = SalesData.objects.filter(
+            order_date__date__gte=start, order_date__date__lte=end
+        )
+
+        # Previous period range (same length as current)
+        period_days = (end - start).days + 1
+        prev_end = start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_days - 1)
+
+        previous_qs = SalesData.objects.filter(
+            order_date__date__gte=prev_start, order_date__date__lte=prev_end
+        )
+
+        # Aggregation
+        current_vendor_transfer = current_qs.aggregate(
+            total=Sum("vendor_transfer")
+        )["total"] or Decimal("0.00")
+
+        previous_vendor_transfer = previous_qs.aggregate(
+            total=Sum("vendor_transfer")
+        )["total"] or Decimal("0.00")
+
+        # Comparison
+        if previous_vendor_transfer == 0:
+            percent_change = 100.0 if current_vendor_transfer > 0 else 0.0
+            status = "increase" if current_vendor_transfer > 0 else "no change"
+        else:
+            percent_change = ((current_vendor_transfer - previous_vendor_transfer) / abs(previous_vendor_transfer)) * 100
+            if current_vendor_transfer > previous_vendor_transfer:
+                status = "increase"
+            elif current_vendor_transfer < previous_vendor_transfer:
+                status = "decrease"
+            else:
+                status = "no change"
+
+        return Response({
+            "vendor_transfer": {
+                "current": round(current_vendor_transfer, 2),
+                "previous": round(previous_vendor_transfer, 2),
+                "percent_change": round(percent_change, 2),
+                "status": status
+            }
         })
