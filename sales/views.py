@@ -568,6 +568,8 @@ class SalesSummaryAPIView(APIView):
                 "returned_count": qs.filter(status__iexact="Returned").count(),
                 "exchanged_amount": qs.filter(status__iexact="Exchanged").aggregate(total=Sum(Abs(F("collected_amount"))))["total"] or 0,
                 "exchanged_count": qs.filter(status__iexact="Exchanged").count(),
+                "order_cancelled_amount": qs.filter(status__iexact="Order Cancelled").aggregate(total=Sum(Abs(F("collected_amount"))))["total"] or 0,
+                "order_cancelled_count": qs.filter(status__iexact="Order Cancelled").count(),
             }
 
         # Get current and previous summaries
