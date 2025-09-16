@@ -156,95 +156,6 @@ class TopProfitableProductsAPIView(APIView):
         })
 
 
-
-# class TopProfitableProductsAPIView(APIView):
-#     def get(self, request):
-#         start_date_str = request.query_params.get("start_date")
-#         end_date_str = request.query_params.get("end_date")
-
-#         if not start_date_str or not end_date_str:
-#             raise ValidationError("start_date and end_date are required.")
-
-#         try:
-#             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-#             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-#         except ValueError:
-#             raise ValidationError("Invalid date format. Use YYYY-MM-DD.")
-
-#         # Calculate previous period dates
-#         period_days = (end_date - start_date).days + 1
-#         prev_end_date = start_date - timedelta(days=1)
-#         prev_start_date = prev_end_date - timedelta(days=period_days - 1)
-
-#         # Get data for both periods
-#         current_period_data = self.get_period_data(start_date, end_date)
-#         previous_period_data = self.get_period_data(prev_start_date, prev_end_date)
-
-#         return Response({
-#             "current_period": current_period_data,
-#             "previous_period": previous_period_data,
-#             "period_days": period_days
-#         })
-
-#     def get_period_data(self, start_date, end_date):
-#         qs = SalesData.objects.exclude(status__iexact='Rto').exclude(status__iexact='Returned')
-#         qs = qs.filter(order_date__date__gte=start_date, order_date__date__lte=end_date)
-
-#         data = (
-#             qs.values('skucode')
-#             .annotate(
-#                 total_vendor_transfer=Sum('vendor_transfer'),
-#                 total_selling_price=Sum('selling_price'),
-#                 total_units=Sum('units_sold'),
-#                 total_actual_price=Sum('actual_product_price'),
-#                 total_collected_amount=Sum('collected_amount'),
-#             )
-#         )
-
-#         total_units_sold = 0
-#         total_vendor_transfer_all = Decimal('0.00')
-#         total_collected_amount_all = Decimal('0.00')
-#         profitable_products = []
-
-#         for item in data:
-#             sku = item['skucode']
-#             vendor_transfer = item['total_vendor_transfer'] or Decimal('0.00')
-#             selling_price = item['total_selling_price'] or Decimal('0.00')
-#             overhead = selling_price * Decimal('0.10')
-#             units = item['total_units'] or 0
-#             collected_amount = item['total_collected_amount'] or Decimal('0.00')
-#             actual_price = item['total_actual_price'] or Decimal('0.00')
-#             total_cost = actual_price
-#             profit_amount = vendor_transfer - (total_cost + overhead)
-#             profit_percent = (profit_amount / selling_price) * 100 if selling_price > 0 else Decimal('0.00')
-
-#             if profit_amount > 0:
-#                 total_units_sold += units
-#                 total_vendor_transfer_all += vendor_transfer
-#                 total_collected_amount_all += collected_amount
-#                 profitable_products.append({
-#                     "sku": sku,
-#                     "vendor_transfer": round(vendor_transfer, 2),
-#                     "total_selling_price": round(selling_price, 2),
-#                     "units": units,
-#                     "collected_amount": round(collected_amount, 2),
-#                     "overhead": round(overhead, 2),
-#                     "total_cost": round(total_cost, 2),
-#                     "profit_amount": round(profit_amount, 2),
-#                     "profit_percent": round(profit_percent, 2)
-#                 })
-
-#         top_5 = sorted(profitable_products, key=lambda x: x['profit_amount'], reverse=True)
-
-#         return {
-#             "top_profitable_products": top_5,
-#             "total_units_sold": total_units_sold,
-#             "total_vendor_transfer": round(total_vendor_transfer_all, 2),
-#             "total_profitable_count": len(profitable_products),
-#             "total_collected_amount": round(total_collected_amount_all, 2)
-#         }
-
-
 from django.db.models import Sum, DecimalField, Case, When, F
 class TopLossProductsAPIView(APIView):
     def get(self, request):
@@ -335,48 +246,6 @@ class TopLossProductsAPIView(APIView):
         })
 
 
-# class TopSellingByUnitsAPIView(APIView):
-#     def get(self, request):
-#         start_date = request.query_params.get("start_date")
-#         end_date = request.query_params.get("end_date")
-
-#         qs = SalesData.objects.exclude(status__iexact='Rto')
-
-#         if start_date and end_date:
-#             try:
-#                 start = datetime.strptime(start_date, "%Y-%m-%d")
-#                 end = datetime.strptime(end_date, "%Y-%m-%d")
-#                 qs = qs.filter(order_date__date__gte=start, order_date__date__lte=end)
-#             except ValueError:
-#                 raise ValidationError("Invalid date format. Use YYYY-MM-DD.")
-
-#         data = (
-#             qs.values('skucode')
-#             .annotate(
-#                 total_units=Sum('units_sold'),
-#                 total_vendor_transfer=Sum('vendor_transfer'),
-#                 total_selling_price=Sum('selling_price'),
-#                 total_actual_price=Sum('actual_product_price'),
-#             )
-#         )
-
-#         result = []
-#         for item in data:
-#             result.append({
-#                 "sku": item['skucode'],
-#                 "units_sold": item['total_units'] or 0,
-#                 # "vendor_transfer": float(item['total_vendor_transfer'] or 0),
-#                 # "selling_price": float(item['total_selling_price'] or 0),
-#                 # "actual_price": float(item['total_actual_price'] or 0)
-#             })
-
-#         top_by_units = sorted(result, key=lambda x: x['units_sold'], reverse=True)[:5]
-
-#         return Response({
-#             "top_selling_by_units": top_by_units
-#         })
-
-
 class TopSellingByUnitsAPIView(APIView):
     def get(self, request):
         start_date = request.query_params.get("start_date")
@@ -394,7 +263,7 @@ class TopSellingByUnitsAPIView(APIView):
                 raise ValidationError("Invalid date format. Use YYYY-MM-DD.")
 
         # 1. Top Selling by Units (excluding RTO)
-        selling_qs = qs.exclude(status__iexact='Rto')
+        selling_qs = qs.exclude(status__iexact='Rto').exclude(status__iexact='Returned').exclude(status__iexact='Exchanged').exclude(status__iexact='Order_Cancelled')
         selling_data = (
             selling_qs.values('skucode')
             .annotate(total_units=Sum('units_sold'))
@@ -413,7 +282,7 @@ class TopSellingByUnitsAPIView(APIView):
         returned_qs = qs.filter(status__iexact='Returned')
         returned_data = (
             returned_qs.values('skucode')
-            .annotate(returned_units=Sum("units_sold"))
+            .annotate(returned_units=Sum(Abs("units_sold")))
         )
 
         returned_result = [
@@ -430,7 +299,7 @@ class TopSellingByUnitsAPIView(APIView):
         rto_qs = qs.filter(status__iexact='Rto')
         rto_data = (
             rto_qs.values('skucode')
-            .annotate(rto_units=Sum("units_sold"))
+            .annotate(rto_units=Sum(Abs("units_sold")))
         )
 
         rto_result = [
@@ -443,85 +312,51 @@ class TopSellingByUnitsAPIView(APIView):
 
         top_rto_units = sorted(rto_result, key=lambda x:x['units_rto'], reverse= True)[:5]
 
+        # 4. Top Exchanged Units (status = Exchanged)
+        exchanged_qs = qs.filter(status__iexact='Exchanged')
+        exchanged_data = (
+            exchanged_qs.values('skucode')
+            .annotate(exchanged_units=Sum(Abs("units_sold")))
+        )
+
+        exchanged_result = [
+            {
+                "sku": item['skucode'],
+                "units_exchanged": item["exchanged_units"] or 0
+            }
+            for item in exchanged_data
+        ]
+
+        top_exchanged_units = sorted(exchanged_result, key=lambda x:x['units_exchanged'], reverse= True)[:5]
+
+
+         # 5 Top Cancelled Units (status = Order Cancelled)
+        cancelled_qs = qs.filter(status__iexact='Order Cancelled')
+        cancelled_data = (
+            cancelled_qs.values('skucode')
+            .annotate(cancelled_units=Sum(Abs("units_sold")))
+        )
+
+        cancelled_result = [
+            {
+                "sku": item['skucode'],
+                "units_cancelled": item["cancelled_units"] or 0
+            }
+            for item in cancelled_data
+        ]
+
+        top_cancelled_units = sorted(cancelled_result, key=lambda x:x['units_cancelled'], reverse= True)[:5]
+
         return Response({
             "top_selling_by_units":top_selling_by_units,
             "top_returned_units":top_returned_units,
-            "top_rto_units":top_rto_units
+            "top_rto_units":top_rto_units,
+            "top_exchanged_units":top_exchanged_units,
+            "top_cancelled_units":top_cancelled_units
         })
 
 from django.db.models import Sum,Count, F
 from django.db.models.functions import Abs
-# class SalesSummaryAPIView(APIView):
-#     def get(self,request):
-#         start_date_str = request.query_params.get("start_date")
-#         end_date_str = request.query_params.get("end_date")
-
-#         if not start_date_str or not end_date_str:
-#             raise ValidationError("start date and end date are required")
-
-#         try:
-#             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-#             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-#         except ValueError:
-#             raise ValidationError("Invalid date format. Use YYYY-MM-DD.")
-
-#         qs = SalesData.objects.filter(order_date__date__gte=start_date, order_date__date__lte=end_date)
-
-#           # Aggregations with absolute value
-        
-#         total_sales = qs.aggregate(total=Sum(Abs(F("collected_amount"))))["total"] or 0
-
-#         delivered_data = qs.filter(status__iexact="Open").aggregate(
-#             total=Sum(Abs(F("collected_amount"))),
-#             count=Count("id")
-#         )
-
-#         rto_data = qs.filter(status__iexact="Rto").aggregate(
-#             total=Sum(Abs(F("collected_amount"))),
-#             count=Count("id")
-#         )
-
-#         returned_data = qs.filter(status__iexact="Returned").aggregate(
-#             total=Sum(Abs(F("collected_amount"))),
-#             count=Count("id")
-#         )
-
-#         exchanged_data = qs.filter(status__iexact="Exchanged").aggregate(
-#             total=Sum(Abs(F("collected_amount"))),
-#             count=Count("id")
-#         )
-
-#         # Date-wise breakdown
-#         daily_data = (
-#             qs.values("order_date__date","skucode")
-#             .annotate(
-#                 daily_sales=Sum(Abs(F("collected_amount"))),
-#                 daily_delivered=Sum(Abs(F("collected_amount")), filter=Q(status__iexact="Open")),
-#                 daily_delivered_count=Count("id", filter=Q(status__iexact="Open")),
-#                 daily_rto=Sum(Abs(F("collected_amount")), filter=Q(status__iexact="Rto")),
-#                 daily_rto_count=Count("id", filter=Q(status__iexact="Rto")),
-#                 daily_returned=Sum(Abs(F("collected_amount")), filter=Q(status__iexact="Returned")),
-#                 daily_returned_count=Count("id", filter=Q(status__iexact="Returned")),
-#                 daily_exchanged=Sum(Abs(F("collected_amount")), filter=Q(status__iexact="Exchanged")),
-#                 daily_exchanged_count=Count("id", filter=Q(status__iexact="Exchanged")),
-#             )
-#             .order_by("order_date__date", "skucode")
-#         )
-
-#         return Response({
-#             "summary": {
-#                 "total_sales": total_sales,
-#                 "delivered_amount": delivered_data["total"] or 0,
-#                 "delivered_count": delivered_data["count"] or 0,
-#                 "rto_amount": rto_data["total"] or 0,
-#                 "rto_count": rto_data["count"] or 0,
-#                 "returned_amount": returned_data["total"] or 0,
-#                 "returned_count": returned_data["count"] or 0,
-#                 "exchanged_amount": exchanged_data["total"] or 0,
-#                 "exchanged_count": exchanged_data["count"] or 0,
-#             },
-#             "daily": list(daily_data)
-#         })
 
 from datetime import datetime, timedelta
 from decimal import Decimal
